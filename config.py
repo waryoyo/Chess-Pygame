@@ -1,0 +1,18 @@
+import string
+
+WIDTH, HEIGHT = 600, 600
+BOARD_ROWS, BOARD_COLS = 8, 8
+SQUARE_SIZE = WIDTH//8
+
+BROWN = (162, 42, 42)
+LIGHT_BROWN = (244, 164, 96)
+BLACK = (0,0,0)
+WHITE = (255,255,255)
+YELLOW_TRANSPARENT = (255, 255, 0, 156)
+LIGHT_GREY_TRANSPARENT = (178, 178, 178, 235)
+
+BOARD_COLORS = (BROWN, LIGHT_BROWN)
+
+LETTERS = list(string.ascii_lowercase)[:8]
+NUMBERS = list(str(i) for i in range(8, 0, -1))
+
