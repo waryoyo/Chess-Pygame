@@ -10,10 +10,16 @@ class Board:
 
     self.pieces = create_pieces()
     self.selected_piece = None
-    self.checked = False
+    
     self.checked_lines = []
-
-    # self.selected_piece_valid_moves = []
+    self.checked_player = None
+    
+    # 0 for ongoing
+    # 1 for player 1 winning
+    # 2 for player 2 winning
+    # 3 for draw
+    # 4 for game stopped
+    self.game_state = 4
 
   
   def get_moves_after_blocked(self, moves : List[Tuple[int, int]], keep_first = False):
@@ -39,9 +45,7 @@ class Board:
     return valid_moves
     
   def calculate_valid_moves(self, piece : Piece):
-    
-    # TODO: Prevent 2 kings from touching each other by removing intersections between them.
-    
+        
     other_king_map = self.pa_1_king_map if piece.player == 2 else self.pa_2_king_map
     
     direction = -1 if piece.player == 1 else 1
@@ -49,31 +53,45 @@ class Board:
     if piece.get_type == Piece_Type.PAWN:
       valid_moves = piece.valid_moves()
       valid_moves = self.get_moves_after_blocked(valid_moves)
-    
-      if check_square_valid(piece.row + 1, piece.col + (1 * direction)):
-        other_king_map[piece.col + (1 * direction)][piece.row + 1] = True
 
-      if not self.check_square_empty(piece.row + 1, piece.col + (1 * direction)):
-        valid_moves.append((piece.row + 1, piece.col + (1 * direction)))
-        
-      if check_square_valid(piece.row - 1, piece.col + (1 * direction)):
-        other_king_map[piece.col + (1 * direction)][piece.row - 1] = True    
-    
-      if not self.check_square_empty(piece.row - 1, piece.col + (1 * direction)):
-        valid_moves.append((piece.row + - 1, piece.col + (1 * direction)))
+      
+      moves = [(piece.row + 1, piece.col + (1 * direction)), (piece.row + - 1, piece.col + (1 * direction))]
+      
+      for move in moves:
+      
+        if check_square_valid(move[0], move[1]):
+          other_king_map[move[1]][move[0]] = True
+
+        if not self.check_square_empty(move[0], move[1]):
+          
+          if self.get_piece_at_square(move[0], move[1]).get_type == Piece_Type.KING and not self.check_same_player(move[0], move[1], piece.player):
+            self.checked_lines.append([move[0], move[1]])
+            self.checked_player = 2 if piece.player == 1 else 1
+            
+          valid_moves.append(move)
+
     
     elif any(piece.get_type == t for t in (Piece_Type.BISHOP, Piece_Type.ROOK, Piece_Type.QUEEN)):
       valid_moves = piece.valid_moves()
-      
+            
       for moves_list in valid_moves:
-        for move in moves_list:
+        check_line = False
+        check_line_end = 0
+        for index, move in enumerate(moves_list):
           if not self.check_square_empty(move[0], move[1]):
-            other_king_map[move[1]][move[0]] = True
+            other_king_map[move[1]][move[0]] = True 
             if self.get_piece_at_square(move[0], move[1]).get_type != Piece_Type.KING:
               break
+            elif not self.check_same_player(move[0], move[1], piece.player):
+              check_line = True
+              check_line_end = index
           else:
             other_king_map[move[1]][move[0]] = True
-            
+        
+        if check_line:
+          self.checked_lines.append(moves_list[:check_line_end])
+          self.checked_lines[-1].append((piece.row, piece.col))
+          self.checked_player = 2 if piece.player == 1 else 1
       
       valid_moves = list(map(lambda x : self.get_moves_after_blocked(x, True), valid_moves))
 
@@ -83,17 +101,16 @@ class Board:
       valid_moves = piece.valid_moves()
       for row, col in valid_moves:
         if not self.check_square_empty(row, col):
+          if self.get_piece_at_square(row, col).get_type == Piece_Type.KING and not self.check_same_player(row, col, piece.player):
+            self.checked_lines.append([row, col])
+            self.checked_player = 2 if piece.player == 1 else 1
+            
           other_king_map[col][row] = True
 
     
     elif piece.get_type == Piece_Type.KING:
       current_king_map = self.pa_2_king_map if piece.player == 2 else self.pa_1_king_map
       valid_moves = set(piece.valid_moves())
-      
-      # for move in valid_moves:
-      #   if check_square_valid(move[1], move[0]):
-      #     other_king_map[move[1]][move[0]] = True
-      
       
       for i in range(len(current_king_map)):
         for j in range(len(current_king_map)):
@@ -129,8 +146,25 @@ class Board:
           
           piece_t = None
     
-  def scan_for_checks(self, kings) -> None:
-    pass
+  def scan_for_checks(self) -> None:
+    if not self.checked_lines:
+      return
+    
+    unallowed = set(itertools.chain(*self.checked_lines))
+    for piece in self.pieces:
+      if piece.get_type != Piece_Type.KING and piece.player == self.checked_player:
+        piece.store_current_valid_moves(list(set(piece.current_moves).intersection(unallowed)))
+    
+    moves_available = False
+    for piece in self.pieces:
+      if piece.player == self.checked_player and piece.current_moves:
+        moves_available = True
+        break
+    
+    if not moves_available:
+      self.game_state = 2 if self.checked_player == 1 else 1
+      
+    
     # TODO: During the valid pieces calculation a certain list
     # of the moves or lines that should be blocked by pieces and then those lines
     # will be intersected with all of those of the pieces of the checked player
@@ -202,6 +236,9 @@ class Board:
     # do kings last
     self.pa_1_king_map = [[False] * BOARD_COLS for _ in range(BOARD_ROWS)]
     self.pa_2_king_map = [[False] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    self.checked_lines = []
+    self.checked_player = None
+    
     
     kings = []
     for piece in self.pieces:
@@ -214,12 +251,13 @@ class Board:
     for king in kings:
       king.store_current_valid_moves(self.calculate_valid_moves(king))
 
-    self.update_pinned_pieces() 
-    
     intersection = set(kings[0].valid_moves()).intersection(kings[1].valid_moves())
     
     kings[0].store_current_valid_moves(list(set(kings[0].current_moves).difference(intersection)))
     kings[1].store_current_valid_moves(list(set(kings[1].current_moves).difference(intersection)))
+    
+    self.update_pinned_pieces() 
+    self.scan_for_checks()
 
 
     

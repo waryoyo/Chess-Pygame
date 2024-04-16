@@ -84,9 +84,7 @@ def handle_event(event, board : Board, current_player : int) -> bool:
   
 
 def main():
-  
-  # TODO: ADD turn based to game
-  
+    
   pygame.init()
   screen = pygame.display.set_mode((WIDTH, HEIGHT))
   selected_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
@@ -123,7 +121,10 @@ def main():
     
     for piece in board.pieces:
       piece.update(screen)
-      
+    
+    if board.game_state == 1 or board.game_state == 2:
+      continue
+    
     if board.selected_piece:
       draw_available_moves(board, screen)
       

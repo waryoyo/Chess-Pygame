@@ -101,7 +101,8 @@ class King(Piece):
         
         for d_x, d_y in directions:
           x, y = self.row + d_x, self.col + d_y
-          valid_moves.append((x, y))
+          if check_square_valid(x, y):
+            valid_moves.append((x, y))
            
         return valid_moves
   
