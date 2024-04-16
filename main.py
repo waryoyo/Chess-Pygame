@@ -1,10 +1,8 @@
 import pygame
 from pygame import gfxdraw
 from config import *
-from piece import Piece_sprite, Piece, Piece_Type
 from typing import *
-from util import create_pieces, remove_piece_empty, check_square_empty
-import itertools
+from board import Board
 
 def draw_board(screen : pygame.Surface):
   for i in range(BOARD_ROWS):
@@ -34,10 +32,10 @@ def draw_labels(screen : pygame.Surface):
     text = font.render(LETTERS[i], True, color)
     screen.blit(text, (i * SQUARE_SIZE + 63, HEIGHT - 20))
 
-def get_moves_after_blocked(moves : List[Tuple[int, int]], pieces : List[Piece], keep_first = False):
+def get_moves_after_blocked(moves : List[Tuple[int, int]], board: Board, keep_first = False):
   valid_moves = []
   for move in moves:
-    if not check_square_empty(pieces, move[0], move[1]):
+    if not board.check_square_empty(move[0], move[1]):
       if keep_first:
         valid_moves.append(move)
       break
@@ -46,86 +44,59 @@ def get_moves_after_blocked(moves : List[Tuple[int, int]], pieces : List[Piece],
 
   return valid_moves
   
-def draw_available_moves(selected_piece : Piece, pieces: List[Piece], screen : pygame.Surface) -> List[Tuple[int,int]]:
+def draw_available_moves(board : Board, screen : pygame.Surface) -> List[Tuple[int,int]]:
   available_move_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
   available_move_surface.fill((0,0,0,0))
-  gfxdraw.filled_circle(available_move_surface, SQUARE_SIZE // 2, SQUARE_SIZE//2, 15 ,LIGHT_GREY_TRANSPARENT)
-  
-  valid_moves = []
-  
-  direction = 1
-  
-  if selected_piece.player == 1:
-    direction *= -1
-    
-  if selected_piece.get_type == Piece_Type.PAWN:
-    valid_moves = selected_piece.valid_moves()
-    valid_moves = get_moves_after_blocked(valid_moves, pieces)
-  
-    if not check_square_empty(pieces, selected_piece.row + 1, selected_piece.col + (1 * direction)):
-      valid_moves.append((selected_piece.row + 1, selected_piece.col + (1 * direction)))
-  
-    if not check_square_empty(pieces, selected_piece.row - 1, selected_piece.col + (1 * direction)):
-      valid_moves.append((selected_piece.row + - 1, selected_piece.col + (1 * direction)))
-  
-  elif selected_piece.get_type == Piece_Type.BISHOP or selected_piece.get_type == Piece_Type.ROOK:
-    valid_moves = selected_piece.valid_moves()
-    valid_moves = list(map(lambda x : get_moves_after_blocked(x, pieces, True), valid_moves))
+  gfxdraw.filled_circle(available_move_surface, SQUARE_SIZE // 2, SQUARE_SIZE//2, 15, LIGHT_GREY_TRANSPARENT)
 
-    valid_moves = list(itertools.chain(*valid_moves))
-  
-  elif selected_piece.get_type == Piece_Type.KNIGHT:
-    valid_moves = selected_piece.valid_moves()
-  
-
-  valid_moves = list(filter(lambda x : x.player != selected_piece.player,valid_moves))
-  
+  valid_moves = board.selected_piece.current_moves
   for row, col in valid_moves:
     screen.blit(available_move_surface, 
       (row * SQUARE_SIZE, col * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
     
-  return valid_moves
-  
-def handle_event(event, pieces : List[Piece], selected_piece, valid_moves : List[Tuple[int,int]]):
+def handle_event(event, board : Board, current_player : int) -> bool:
     mouse_pos = pygame.mouse.get_pos()
   
     if event.type == pygame.MOUSEBUTTONUP:
         
-      if selected_piece:
-        for row, col in valid_moves:
+      if board.selected_piece and board.selected_piece.player == current_player:
+        for row, col in board.selected_piece.current_moves:
           selected_rect = pygame.Rect(row * SQUARE_SIZE, col * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE)
+          
           if selected_rect.collidepoint(mouse_pos):
-            remove_piece_empty(pieces, row, col)
-            selected_piece.move(row, col)
-            selected_piece = None
-            valid_moves = []
-            return selected_piece, valid_moves
+            
+            board.remove_piece_at(row, col)
+            board.move_selected_piece(row, col)
+            current_player += 1
+            board.selected_piece = None
+            return True
           
           
-      for piece in pieces:
+      for piece in board.pieces:
           if piece.rect.collidepoint(mouse_pos):
-            if selected_piece == piece:
-              selected_piece = None
-              valid_moves = []
-            else:
-              selected_piece = piece 
+            if board.selected_piece == piece:
+              board.selected_piece = None
+            elif piece.player == current_player:
+              board.selected_piece = piece 
       
-    return selected_piece, valid_moves 
+    return False
        
   
 
 def main():
+    
   pygame.init()
   screen = pygame.display.set_mode((WIDTH, HEIGHT))
   selected_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
   selected_surface.fill(YELLOW_TRANSPARENT)
   
-  pieces = create_pieces()
-  
-  selected_piece = None  
-  valid_moves = []
-  
+  board = Board()
+  board.create_board()
+  turn_counter = 0
+    
   while True:
+    current_player = 1 if turn_counter % 2 == 0 else 2
+    
     mouse_pos = pygame.mouse.get_pos()
     
     for event in pygame.event.get():
@@ -133,29 +104,33 @@ def main():
         pygame.quit()
         exit()
       
-      selected_piece, valid_moves = handle_event(event, pieces, selected_piece, valid_moves)
+      update_counter = handle_event(event, board, current_player)
+      if update_counter: turn_counter += 1
         
             
     screen.fill(BLACK)
     
     draw_board(screen)
     
-    if selected_piece:
+    if board.selected_piece:
       screen.blit(selected_surface, 
-        (selected_piece.row * SQUARE_SIZE, selected_piece.col * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
+        (board.selected_piece.row * SQUARE_SIZE, board.selected_piece.col * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
       
     
     draw_labels(screen)
     
-    for piece in pieces:
+    for piece in board.pieces:
       piece.update(screen)
-      
-    if selected_piece:
-      valid_moves = draw_available_moves(selected_piece, pieces, screen)
+    
+    if board.game_state == 1 or board.game_state == 2:
+      continue
+    
+    if board.selected_piece:
+      draw_available_moves(board, screen)
       
     hovered = False
-    for piece in pieces:
-      if piece.rect.collidepoint(mouse_pos):
+    for piece in board.pieces:
+      if piece.rect.collidepoint(mouse_pos) and piece.player == current_player:
         pygame.mouse.set_cursor(*pygame.cursors.diamond)
         hovered = True
         break
