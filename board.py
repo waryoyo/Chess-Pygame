@@ -66,6 +66,7 @@ class Board:
           
           if self.get_piece_at_square(move[0], move[1]).get_type == Piece_Type.KING and not self.check_same_player(move[0], move[1], piece.player):
             self.checked_lines.append([move[0], move[1]])
+            self.checked_lines[-1].append((piece.row, piece.col))
             self.checked_player = 2 if piece.player == 1 else 1
             
           valid_moves.append(move)
@@ -103,6 +104,7 @@ class Board:
         if not self.check_square_empty(row, col):
           if self.get_piece_at_square(row, col).get_type == Piece_Type.KING and not self.check_same_player(row, col, piece.player):
             self.checked_lines.append([row, col])
+            self.checked_lines[-1].append((piece.row, piece.col))
             self.checked_player = 2 if piece.player == 1 else 1
             
           other_king_map[col][row] = True
